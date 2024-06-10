@@ -1,0 +1,16 @@
+{
+  "name": "gs_client",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "vite",
+    "build": "tsc && vite build",
+    "serve": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vite": "^5.2.12"
+  },
+  "dependencies": {
+    "ol": "latest"
+  }
+}
