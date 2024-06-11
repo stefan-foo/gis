@@ -13,8 +13,11 @@ import {
 } from "./geoserver-layer-util";
 import { LayerInfo } from "./model/layer-info";
 import "./style.css";
+import { Pixel } from "ol/pixel";
+import Feature from "ol/Feature";
+import { keywords } from "./constants";
 
-const legend = document.getElementsByClassName("legend")[0];
+const legend: HTMLElement = document.getElementById("legend")!!;
 const popup = new Overlay({
   element: document.getElementById("popup") ?? undefined,
   autoPan: true,
@@ -34,7 +37,10 @@ const map = new Map({
   overlays: [popup],
 });
 
-const wmsLayers = (await getWMSLayersInfo()) ?? [];
+const wmsLayers =
+  (await getWMSLayersInfo())?.filter(
+    (layer) => !layer.keywords.includes(keywords.hide_wms)
+  ) ?? [];
 const wfsLayers = (await getWFSLayersInfo()) ?? [];
 
 if (wfsLayers?.length > 0) {
@@ -51,7 +57,74 @@ if (wfsLayers?.length > 0) {
   legend.appendChild(wfsHeader);
 }
 
-wfsLayers.forEach(initLayer);
+wfsLayers
+  .filter((el) => !el.keywords.includes(keywords.powerplant))
+  .forEach(initLayer);
+
+const wfsHeader = document.createElement("hr");
+legend.appendChild(wfsHeader);
+
+wfsLayers
+  .filter((el) => el.keywords.includes(keywords.powerplant))
+  .forEach(initLayer);
+
+map.on("singleclick", async (evt) => {
+  const featurePromises = map
+    .getAllLayers()
+    .slice(1)
+    .filter((layer) => layer.isVisible())
+    .toReversed()
+    .map((layer) => {
+      if (layer instanceof VectorLayer) {
+        return Promise.resolve(
+          getFirstFeatureFromVectorLayer(layer, evt.pixel)
+        );
+      } else if (layer instanceof TileLayer) {
+        return getFirstFeatureFromTileLayer(layer, evt.coordinate);
+      } else {
+        return Promise.resolve(null);
+      }
+    });
+
+  const feature = (await Promise.all(featurePromises)).find((f) => f !== null);
+
+  if (!feature) {
+    popup.setPosition(undefined);
+    return;
+  }
+
+  const props =
+    feature instanceof Feature ? feature.getProperties() : feature.properties;
+
+  displayDetailsPopUp(evt.coordinate, props);
+});
+
+function getFirstFeatureFromVectorLayer(layer: VectorLayer<any>, pixel: Pixel) {
+  const features = map.getFeaturesAtPixel(pixel);
+  return features.length ? features[0] : null;
+}
+
+async function getFirstFeatureFromTileLayer(
+  layer: TileLayer<any>,
+  pixel: Pixel
+) {
+  const viewResolution = map.getView().getResolution();
+
+  if (!viewResolution) return null;
+
+  const url = layer
+    ?.getSource()
+    ?.getFeatureInfoUrl(pixel, viewResolution, "EPSG:3857", {
+      INFO_FORMAT: "application/json",
+    });
+
+  if (!url) return null;
+
+  const response = await fetch(url);
+  const features = (await response.json()).features;
+
+  return features.length > 0 ? features[0] : null;
+}
 
 function initLayer(layerInfo: LayerInfo) {
   const item = document.createElement("div");
@@ -77,49 +150,6 @@ function initLayer(layerInfo: LayerInfo) {
   legend.appendChild(item);
 }
 
-map.on("singleclick", function (evt) {
-  const priorityLayer = map
-    .getAllLayers()
-    .slice(1)
-    .find((l) => l.isVisible());
-
-  if (priorityLayer instanceof VectorLayer) {
-    const features = map.getFeaturesAtPixel(evt.pixel);
-    if (features.length == 0) {
-      popup.setPosition(undefined);
-      return;
-    }
-
-    displayDetailsPopUp(evt.coordinate, features[0].getProperties());
-    return;
-  }
-
-  const viewResolution = map.getView().getResolution();
-
-  if (!viewResolution) return;
-
-  const layer: TileLayer<any> = priorityLayer as TileLayer<any>;
-  const url = layer
-    ?.getSource()
-    ?.getFeatureInfoUrl(evt.coordinate, viewResolution, "EPSG:3857", {
-      INFO_FORMAT: "application/json",
-    });
-
-  if (!url) return;
-
-  fetch(url)
-    .then((response) => response.json())
-    .then((data) => {
-      const feature = data.features[0];
-      if (!feature) {
-        popup.setPosition(undefined);
-        return;
-      }
-
-      displayDetailsPopUp(evt.coordinate, feature.properties);
-    });
-});
-
 function displayDetailsPopUp(coordinate: Coordinate, props: any) {
   let info = "";
   for (const [key, value] of Object.entries(props)) {
@@ -131,7 +161,7 @@ function displayDetailsPopUp(coordinate: Coordinate, props: any) {
       continue;
     }
 
-    info = info.concat(`${sanitazeKey(key)}: ${sanitazeValue(key, value)}<br>`);
+    info = info.concat(`${sanitaze(key)}: ${sanitazeValue(key, value)}<br>`);
   }
 
   const popupContent = document.getElementById("popup-content");
@@ -142,27 +172,29 @@ function displayDetailsPopUp(coordinate: Coordinate, props: any) {
   popup.setPosition(coordinate);
 }
 
-function sanitazeKey(key: string) {
+function sanitaze(key: string): string {
   return capitalize(key.replace(/[:_]/g, " "));
 }
 
-function sanitazeValue(key: string, value: string | number) {
-  if (typeof value === "string") {
-    return value.charAt(0).toUpperCase() + value.slice(1);
+function sanitazeValue(key: string, value: string | number): string {
+  if (typeof value === "string" && key !== "ele") {
+    return sanitaze(value);
   }
+
+  const numberValue = value as number;
 
   const searchableKey = key.toLocaleLowerCase();
   if (searchableKey.indexOf("area") >= 0) {
-    return value < 1000000
-      ? `${value} m²`
-      : `${(value / 1000000).toFixed(2)} km²`;
-  } else if (searchableKey.indexOf("height") >= 0) {
-    return `${value} m`;
+    return numberValue < 1000000
+      ? `${numberValue} m²`
+      : `${(numberValue / 1000000).toFixed(2)} km²`;
+  } else if (searchableKey.indexOf("ele") >= 0) {
+    return `${numberValue} m`;
   }
 
   return value.toString();
 }
 
-function capitalize(value: string) {
+function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }

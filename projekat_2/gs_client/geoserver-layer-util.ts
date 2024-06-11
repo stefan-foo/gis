@@ -7,6 +7,7 @@ import { bbox as bboxStrategy } from "ol/loadingstrategy.js";
 import { LayerInfo } from "./model/layer-info";
 import { WMSCapabilities } from "ol/format";
 import { GEOSERVER_URI, WORKSPACE } from "./constants";
+import { vectorLayerPredefinedStyles } from "./layer-styles";
 
 export async function getWFSLayersInfo(): Promise<LayerInfo[]> {
   const response = await fetch(
@@ -18,10 +19,19 @@ export async function getWFSLayersInfo(): Promise<LayerInfo[]> {
 
   const featureElements = xmlDoc.getElementsByTagName("FeatureType");
   //@ts-ignore
+  console.log(xmlDoc);
+  //@ts-ignore
   return Array.from(featureElements).map((featureElement) => {
     const name = featureElement.getElementsByTagName("Name")[0].textContent;
     const title = featureElement.getElementsByTagName("Title")[0].textContent;
-    return { name: name, title: title, type: "WFS" };
+    return {
+      name: name,
+      title: title,
+      type: "WFS",
+      keywords: Array.from(
+        featureElement.getElementsByTagName("ows:Keyword")
+      ).map((el) => el.textContent),
+    };
   });
 }
 
@@ -34,21 +44,27 @@ export async function getWMSLayersInfo(): Promise<LayerInfo[]> {
   const capabilities = new WMSCapabilities().read(text);
 
   const layers: LayerInfo[] = capabilities.Capability.Layer.Layer?.map(
-    (responseLayer: any) => ({
-      name: responseLayer.Name,
-      title: responseLayer.Title,
-      service: "WMS",
-    })
+    (responseLayer: any) => {
+      return {
+        name: responseLayer.Name,
+        title: responseLayer.Title,
+        service: "WMS",
+        keywords: responseLayer.KeywordList,
+      };
+    }
   );
 
   return layers;
 }
 
 export function createVectorLayer(layer: LayerInfo): VectorLayer<any> {
+  const style = vectorLayerPredefinedStyles[layer.name];
+  console.log(`Styles ${style ? "found" : "missing"} for layer ${layer.name}`);
+
   return new VectorLayer({
     source: new VectorSource({
       format: new GeoJSON(),
-      url: function (extent) {
+      url: (extent) => {
         return `${GEOSERVER_URI}/${WORKSPACE}/wfs?service=WFS&request=GetFeature&typename=${
           layer.name
         }&outputFormat=application/json&srsname=EPSG:3857&bbox=${extent.join(
@@ -57,6 +73,7 @@ export function createVectorLayer(layer: LayerInfo): VectorLayer<any> {
       },
       strategy: bboxStrategy,
     }),
+    style: style,
   });
 }
 
