@@ -11,8 +11,9 @@ import { vectorLayerPredefinedStyles } from "./layer-styles";
 
 export async function getWFSLayersInfo(): Promise<LayerInfo[]> {
   const response = await fetch(
-    `${GEOSERVER_URI}/${WORKSPACE}/wfs?request=GetCapabilities&service=WFS&AcceptFormats=application/json`
+    `${GEOSERVER_URI}/${WORKSPACE}/wfs?request=GetCapabilities&service=WFS`
   );
+
   const xmlText = await response.text();
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlText, "text/xml");
@@ -36,15 +37,16 @@ export async function getWFSLayersInfo(): Promise<LayerInfo[]> {
 }
 
 export async function getWMSLayersInfo(): Promise<LayerInfo[]> {
-  const response = await fetch(
+  const wmsCapabilitiesResponse = await fetch(
     `${GEOSERVER_URI}/${WORKSPACE}/wms?request=GetCapabilities&service=WMS`
   );
 
-  const text = await response.text();
+  const text = await wmsCapabilitiesResponse.text();
   const capabilities = new WMSCapabilities().read(text);
 
   const layers: LayerInfo[] = capabilities.Capability.Layer.Layer?.map(
     (responseLayer: any) => {
+      console.log(responseLayer);
       return {
         name: responseLayer.Name,
         title: responseLayer.Title,

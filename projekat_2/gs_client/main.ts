@@ -31,8 +31,8 @@ const map = new Map({
     }),
   ],
   view: new View({
-    center: fromLonLat([20.5, 44.0]),
-    zoom: 7.7,
+    center: fromLonLat([20.4, 44.05]),
+    zoom: 7.4,
   }),
   overlays: [popup],
 });
