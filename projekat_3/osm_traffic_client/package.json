@@ -1,0 +1,16 @@
+{
+  "name": "osm_traffic_client",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "vite",
+    "build": "tsc && vite build",
+    "serve": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.3.1"
+  },
+  "dependencies": {
+    "ol": "latest",
+    "typescript": "^5.5.2"
+  }
+}
