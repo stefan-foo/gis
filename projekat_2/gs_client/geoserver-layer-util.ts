@@ -10,11 +10,11 @@ import { GEOSERVER_URI, WORKSPACE } from "./constants";
 import { vectorLayerPredefinedStyles } from "./layer-styles";
 
 export async function getWFSLayersInfo(): Promise<LayerInfo[]> {
-  const response = await fetch(
+  const wfsCapabilitiesResponse = await fetch(
     `${GEOSERVER_URI}/${WORKSPACE}/wfs?request=GetCapabilities&service=WFS`
   );
 
-  const xmlText = await response.text();
+  const xmlText = await wfsCapabilitiesResponse.text();
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlText, "text/xml");
 
