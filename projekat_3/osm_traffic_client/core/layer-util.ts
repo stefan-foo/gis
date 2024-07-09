@@ -6,7 +6,7 @@ import { bbox as bboxStrategy } from "ol/loadingstrategy";
 import { ImageWMS, TileWMS } from "ol/source";
 import VectorSource from "ol/source/Vector";
 import { GEOSERVER_URI, WORKSPACE } from "../constants";
-import { getStyle, styles } from "../layer-styles";
+import { styles } from "../layer-styles";
 import { Attribute } from "../model/attribute";
 import { DataType } from "../model/data-type";
 import { LayerInfo } from "../model/layer-info";
