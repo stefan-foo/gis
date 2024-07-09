@@ -45,13 +45,8 @@ export const styles: {
   },
 };
 
-export function getStyle(layer: any) {
-  return (
-    styles[layer] ??
-    new Style({
-      stroke: new Stroke({
-        width: 10,
-      }),
-    })
-  );
+export function getStyle(
+  layer: string
+): (f: any, r: any) => Style | Style | Style[] {
+  return styles[layer];
 }
