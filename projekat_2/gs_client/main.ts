@@ -15,7 +15,9 @@ import { LayerInfo } from "./model/layer-info";
 import "./style.css";
 import { Pixel } from "ol/pixel";
 import Feature from "ol/Feature";
-import { keywords } from "./constants";
+import { GEOSERVER_URI, WORKSPACE, keywords } from "./constants";
+import { ImageWMS, TileWMS } from "ol/source";
+import ImageLayer from "ol/layer/Image";
 
 const legend: HTMLElement = document.getElementById("legend")!!;
 const popup = new Overlay({
