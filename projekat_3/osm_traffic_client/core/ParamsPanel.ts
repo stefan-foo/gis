@@ -24,7 +24,7 @@ export class ParamsPanel {
       const row = document.createElement("div");
 
       const label = document.createElement("label");
-      label.textContent = sanitaze(param.name) + " = ";
+      label.textContent = sanitaze(param.name);
 
       const input = document.createElement("input");
       input.type = this.getInputType(param.dataType);

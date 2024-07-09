@@ -4,7 +4,7 @@ import re
 import time
 import lxml.etree as ET
 from util import print_progress_bar, estimate_seconds_to_completion
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 config = configparser.ConfigParser()
 config.read("import.conf")
@@ -36,7 +36,12 @@ db.execute(f"""
       type VARCHAR(50),                       
       speed DECIMAL(5, 2),
       angle FLOAT,              
-      lane BIGINT,                               
+      lane BIGINT,   
+      waiting DECIMAL(6, 2),
+      fuel DECIMAL(10, 2),
+      co DECIMAL(10, 2),
+      co2 DECIMAL(10, 2),          
+      noise DECIMAL(10, 2),                
       position GEOMETRY(Point, 3857)
   )""")
 
@@ -52,12 +57,31 @@ if (not config['import'].getboolean('skip_index_creation')):
   
   print(f"creating index {table_name}_timestamp_idx")
   db.execute(f"CREATE INDEX {table_name}_timestamp_idx ON {table_name} (timestamp);")
+  
+  print(f"creating index {table_name}_speed_idx")
+  db.execute(f"CREATE INDEX {table_name}_speed_idx ON {table_name} (speed);")
+  
+  print(f"creating index {table_name}_waiting_idx")
+  db.execute(f"CREATE INDEX {table_name}_waiting_idx ON {table_name} (waiting);")
+  
+  print(f"creating index {table_name}_simulation_step_idx")
+  db.execute(f"CREATE INDEX {table_name}_simulation_step_idx ON {table_name} (simulation_step);")
+  
+  print(f"creating index {table_name}_noise_idx")
+  db.execute(f"CREATE INDEX {table_name}_noise_idx ON {table_name} (noise);")
+  
+  print(f"creating index {table_name}_co2_idx")
+  db.execute(f"CREATE INDEX {table_name}_co2_idx ON {table_name} (co2);")
+  
+  print(f"creating index {table_name}_fuel_idx")
+  db.execute(f"CREATE INDEX {table_name}_fuel_idx ON {table_name} (fuel);")
+  
 else:
   print('skipping index creation')
 
 insert_query = f"""
-    INSERT INTO {table_name} (vehicle_id, timestamp, simulation_step, type, speed, angle, lane, position)
-      VALUES (%s, %s, %s, %s, %s, %s, %s, ST_Transform(ST_SetSRID(ST_MakePoint(%s, %s), 4326), 3857))
+    INSERT INTO {table_name} (vehicle_id, timestamp, simulation_step, type, speed, angle, lane, waiting, fuel, co, co2, noise, position)
+      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, ST_Transform(ST_SetSRID(ST_MakePoint(%s, %s), 4326), 3857))
             """
 
 print("collecting data")
@@ -74,7 +98,7 @@ imported = 0
 timestep_iteration = 0
 import_start_time = time.time()
 print("importing data")
-for (event, timestep) in []:
+for (event, timestep) in context:
   sim_time = float(timestep.attrib['time'])
   timestamp = virtual_timestamp + timedelta(seconds=int(sim_time))  
   
@@ -87,9 +111,16 @@ for (event, timestep) in []:
     veh_lon = vehicle.attrib['x']
     veh_angle = vehicle.attrib['angle']
     veh_type = vehicle.attrib['type']
+    veh_type = "bus" if veh_type == "bus_bus" else "veh"
+    co2 = vehicle.attrib["CO2"]
+    noise = vehicle.attrib["noise"]
+    co = vehicle.attrib["CO"]
+    fuel = vehicle.attrib["fuel"]
+    waiting = vehicle.attrib["waiting"]
+    
     veh_speed = round(float(vehicle.attrib['speed']) * 3.6, 2)
     
-    batch.append((veh_id, timestamp, sim_time, veh_type, veh_speed, veh_angle, veh_lane, veh_lon, veh_lat))
+    batch.append((veh_id, timestamp, sim_time, veh_type, veh_speed, veh_angle, veh_lane, waiting, fuel, co, co2, noise, veh_lon, veh_lat))
     
   db.executemany(insert_query, batch)
   
@@ -120,6 +151,9 @@ SELECT
   MAX(timestamp) as arrival_timestamp,
   MIN(simulation_step) as departure_simulation_step,
   MAX(simulation_step) as arrival_simulation_step,
+  SUM(fuel) as fuel_consumed,
+  SUM(CO2) as co2_emitted,
+  SUM(CO) as co_emitted,
   EXTRACT(EPOCH FROM age(MAX(timestamp), MIN(timestamp))) as travel_duration,
   ROUND((ST_Length(ST_Transform(ST_MakeLine(ST_SetSRID(position, 3857) ORDER BY timestamp), 3857))::numeric) / 1000.0, 3) as route_length,
   ST_SetSRID(ST_MakeLine(ST_SetSRID(position, 3857) ORDER BY timestamp), 3857) as route
@@ -132,12 +166,15 @@ GROUP BY
 
 conn.commit()
 
-print(f"creating index {table_name}_simulation_step_idx")
-db.execute(f"CREATE INDEX {table_name}_simulation_step_idx ON {table_name} (simulation_step);")
-
 if (not config['import'].getboolean('skip_index_creation')):
   print(f"creating index {view_name}_vehicle_id_idx")
   db.execute(f"CREATE INDEX {view_name}_vehicle_id_idx ON {view_name} (vehicle_id);")
+  
+  print(f"creating index {view_name}_fuel_consumed_idx")
+  db.execute(f"CREATE INDEX {view_name}_fuel_consumed_idx ON {view_name} (fuel_consumed);")
+  
+  print(f"creating index {view_name}_co2_emitted_idx")
+  db.execute(f"CREATE INDEX {view_name}_co2_emitted_idx ON {view_name} (co2_emitted);")
   
   print(f"creating index {view_name}_departure_simulation_step_idx")
   db.execute(f"CREATE INDEX {view_name}_departure_simulation_step_idx ON {view_name} (departure_simulation_step);")

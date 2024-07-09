@@ -110,7 +110,8 @@ div {
   margin-bottom: 10px;
 }
 
-.filter-panel {
+.sideways {
+  rotate: 90;
 }
 
 .filter-row {

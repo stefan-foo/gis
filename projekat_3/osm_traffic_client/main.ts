@@ -1,32 +1,24 @@
 import { Feature, Map, Overlay, View } from "ol";
-import { Extent } from "ol/extent";
-import GeoJSON from "ol/format/GeoJSON";
+import { Coordinate } from "ol/coordinate";
+import ImageLayer from "ol/layer/Image";
 import TileLayer from "ol/layer/Tile";
 import VectorLayer from "ol/layer/Vector";
-import { bbox as bboxStrategy } from "ol/loadingstrategy";
+import { Pixel } from "ol/pixel";
 import { fromLonLat } from "ol/proj";
+import { ImageWMS, TileWMS } from "ol/source";
 import OSM from "ol/source/OSM";
-import VectorSource from "ol/source/Vector";
-import { GEOSERVER_URI, WORKSPACE } from "./constants";
 import { FilterPanel } from "./core/FilterPanel";
-import { convertToCql, getCql, getGeometryAttribute } from "./core/filter-util";
-import { Attribute } from "./model/attribute";
-import { DataType } from "./model/data-type";
-import { Filter } from "./model/filter";
-import { LayerInfo } from "./model/layer-info";
-import "./style.css";
+import { ParamsPanel } from "./core/ParamsPanel";
 import {
+  createImageLayer,
   createTileLayer,
+  createVectorLayer,
   getWFSLayersInfo,
   getWMSLayersInfo,
 } from "./core/layer-util";
-import { styles } from "./layer-styles";
+import { LayerInfo } from "./model/layer-info";
+import "./style.css";
 import { sanitaze, sanitazeValue } from "./util";
-import { Coordinate } from "ol/coordinate";
-import { Pixel } from "ol/pixel";
-import { TileWMS } from "ol/source";
-import { LanguageServiceMode } from "typescript";
-import { ParamsPanel } from "./core/ParamsPanel";
 
 const legend = document.getElementById("legend")!!;
 const popup = new Overlay({
@@ -59,7 +51,7 @@ map.on("singleclick", async (evt) => {
         return Promise.resolve(
           getFirstFeatureFromVectorLayer(layer, evt.pixel)
         );
-      } else if (layer instanceof TileLayer) {
+      } else if (layer instanceof TileLayer || layer instanceof ImageLayer) {
         return getFirstFeatureFromTileLayer(layer, evt.coordinate);
       } else {
         return Promise.resolve(null);
@@ -79,39 +71,8 @@ map.on("singleclick", async (evt) => {
   displayDetailsPopUp(evt.coordinate, props);
 });
 
-function createVectorLayer(
-  layer: LayerInfo,
-  filters: FilterPanel,
-  params: ParamsPanel | null
-) {
-  return new VectorLayer({
-    source: new VectorSource({
-      format: new GeoJSON(),
-      url: (extent) => {
-        const cql = getCql(layer, filters.getFilters(), extent);
-        const viewParams = params != null ? params.paramString : null;
-        if (cql) {
-          return `${GEOSERVER_URI}/${WORKSPACE}/wfs?service=WFS&request=GetFeature&typename=${
-            layer.name
-          }&outputFormat=application/json&srsname=EPSG:3857${
-            viewParams ? `&VIEWPARAMS=${viewParams}` : ""
-          }&cql_filter=${encodeURI(cql)}`;
-        }
-
-        return `${GEOSERVER_URI}/${WORKSPACE}/wfs?service=WFS&request=GetFeature&typename=${
-          layer.name
-        }&outputFormat=application/json&srsname=EPSG:3857${
-          viewParams ? `&VIEWPARAMS=${viewParams}` : ""
-        }&bbox=${extent.join(",")},EPSG:3857`;
-      },
-      strategy: bboxStrategy,
-    }),
-    style: styles[layer.name],
-  });
-}
-
 function addLayerControl(
-  layer: VectorLayer<any> | TileLayer<TileWMS>,
+  layer: VectorLayer<any> | TileLayer<TileWMS> | ImageLayer<ImageWMS>,
   layerInfo: LayerInfo,
   paramsPanel: ParamsPanel | null,
   filterPanel: FilterPanel | null
@@ -126,23 +87,35 @@ function addLayerControl(
   checkbox.type = "checkbox";
   checkbox.checked = layer.getVisible();
   checkbox.addEventListener("change", (e: Event) => {
+    if (layer instanceof TileLayer || layer instanceof ImageLayer) {
+      layer.getSource()?.updateParams({ VIEWPARAMS: paramsPanel?.paramString });
+    }
     layer.setVisible((e.target as HTMLInputElement).checked);
-    console.log(layer.isVisible());
   });
 
   const label = document.createElement("span");
   label.textContent = layerInfo.title;
 
+  header.appendChild(checkbox);
+  header.appendChild(label);
+
+  const noFilters = paramsPanel == null && filterPanel == null;
+  if (noFilters) {
+    layerControl.appendChild(header);
+    legend.appendChild(layerControl);
+    return;
+  }
+
   const dropdownButton = document.createElement("button");
-  dropdownButton.textContent = "▼";
+  dropdownButton.append(document.createTextNode("▼"));
   dropdownButton.classList.add("dropdown-button");
   dropdownButton.addEventListener("click", () => {
+    dropdownButton.classList.toggle("sideways");
     layerDetails.classList.toggle("show");
   });
 
-  header.appendChild(checkbox);
-  header.appendChild(label);
   header.appendChild(dropdownButton);
+
   layerControl.appendChild(header);
 
   const layerDetails = document.createElement("div");
@@ -162,7 +135,7 @@ function addLayerControl(
   const refreshButton = document.createElement("button");
   refreshButton.textContent = "Refresh";
   refreshButton.addEventListener("click", () => {
-    if (layer instanceof TileLayer) {
+    if (layer instanceof TileLayer || layer instanceof ImageLayer) {
       layer.getSource()?.updateParams({ VIEWPARAMS: paramsPanel?.paramString });
     }
     layer.getSource()?.refresh();
@@ -197,7 +170,12 @@ async function initializeLayers() {
   wmsLayersInfo.forEach((layerInfo) => {
     const paramsPanel =
       layerInfo.viewParams.length > 0 ? new ParamsPanel(layerInfo) : null;
-    const layer = createTileLayer(layerInfo, paramsPanel);
+    let layer;
+    if (layerInfo.keywords.includes("layer:image")) {
+      layer = createImageLayer(layerInfo, paramsPanel);
+    } else {
+      layer = createTileLayer(layerInfo, paramsPanel);
+    }
     layer.setVisible(false);
     layer.set("name", `${layerInfo.service}-${layerInfo.name}`);
     map.addLayer(layer);
@@ -205,13 +183,8 @@ async function initializeLayers() {
   });
 }
 
-function getFirstFeatureFromVectorLayer(layer: VectorLayer<any>, pixel: Pixel) {
-  const features = map.getFeaturesAtPixel(pixel);
-  return features.length ? features[0] : null;
-}
-
 async function getFirstFeatureFromTileLayer(
-  layer: TileLayer<any>,
+  layer: TileLayer<any> | ImageLayer<ImageWMS>,
   pixel: Pixel
 ) {
   const viewResolution = map.getView().getResolution();
@@ -252,6 +225,11 @@ function displayDetailsPopUp(coordinate: Coordinate, props: any) {
   }
 
   popup.setPosition(coordinate);
+}
+
+function getFirstFeatureFromVectorLayer(layer: VectorLayer<any>, pixel: Pixel) {
+  const features = map.getFeaturesAtPixel(pixel);
+  return features.length ? features[0] : null;
 }
 
 initializeLayers();

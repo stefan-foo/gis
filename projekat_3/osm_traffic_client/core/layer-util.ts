@@ -1,13 +1,20 @@
+import { GeoJSON, WMSCapabilities } from "ol/format";
+import ImageLayer from "ol/layer/Image";
 import TileLayer from "ol/layer/Tile";
+import VectorLayer from "ol/layer/Vector";
+import { bbox as bboxStrategy } from "ol/loadingstrategy";
+import { ImageWMS, TileWMS } from "ol/source";
+import VectorSource from "ol/source/Vector";
 import { GEOSERVER_URI, WORKSPACE } from "../constants";
+import { styles } from "../layer-styles";
 import { Attribute } from "../model/attribute";
 import { DataType } from "../model/data-type";
 import { LayerInfo } from "../model/layer-info";
-import { TileWMS } from "ol/source";
-import { WMSCapabilities } from "ol/format";
-import { ViewParam } from "../model/view-param";
 import { ParamDataType } from "../model/param-data-type";
+import { ViewParam } from "../model/view-param";
+import { FilterPanel } from "./FilterPanel";
 import { ParamsPanel } from "./ParamsPanel";
+import { getCql } from "./filter-util";
 
 export async function getWFSLayersInfo(): Promise<LayerInfo[]> {
   const wfsCapabilitiesResponse = await fetch(
@@ -90,18 +97,42 @@ export function createTileLayer(
   layer: LayerInfo,
   paramsPanel: ParamsPanel | null
 ): TileLayer<TileWMS> {
-  console.log("refresh");
+  const params: any = {
+    LAYERS: `${WORKSPACE}:${layer.name}`,
+    TILED: true,
+  };
+  if (paramsPanel?.paramString) {
+    params.VIEWPARAMS = paramsPanel?.paramString;
+  }
+
   return new TileLayer({
     source: new TileWMS({
       attributions: "@geoserver",
       url: `${GEOSERVER_URI}/${WORKSPACE}/wms?`,
-      params: {
-        LAYERS: `${WORKSPACE}:${layer.name}`,
-        TILED: true,
-        VIEWPARAMS: paramsPanel?.paramString,
-      },
+      params: params,
       serverType: "geoserver",
-      transition: 0,
+    }),
+  });
+}
+
+export function createImageLayer(
+  layer: LayerInfo,
+  paramsPanel: ParamsPanel | null
+): ImageLayer<ImageWMS> {
+  const params: any = {
+    LAYERS: `${WORKSPACE}:${layer.name}`,
+    TILED: true,
+  };
+  if (paramsPanel?.paramString) {
+    params.VIEWPARAMS = paramsPanel?.paramString;
+  }
+
+  return new ImageLayer({
+    source: new ImageWMS({
+      attributions: "@geoserver",
+      url: `${GEOSERVER_URI}/${WORKSPACE}/wms?`,
+      params: params,
+      serverType: "geoserver",
     }),
   });
 }
@@ -116,4 +147,35 @@ export function parseViewParams(keywords: string[]): ViewParam[] {
         dataType: split[2] as ParamDataType,
       };
     });
+}
+
+export function createVectorLayer(
+  layer: LayerInfo,
+  filters: FilterPanel,
+  params: ParamsPanel | null
+) {
+  return new VectorLayer({
+    source: new VectorSource({
+      format: new GeoJSON(),
+      url: (extent) => {
+        const cql = getCql(layer, filters.getFilters(), extent);
+        const viewParams = params != null ? params.paramString : null;
+        if (cql) {
+          return `${GEOSERVER_URI}/${WORKSPACE}/wfs?service=WFS&request=GetFeature&typename=${
+            layer.name
+          }&outputFormat=application/json&srsname=EPSG:3857${
+            viewParams ? `&VIEWPARAMS=${viewParams}` : ""
+          }&cql_filter=${encodeURI(cql)}`;
+        }
+
+        return `${GEOSERVER_URI}/${WORKSPACE}/wfs?service=WFS&request=GetFeature&typename=${
+          layer.name
+        }&outputFormat=application/json&srsname=EPSG:3857${
+          viewParams ? `&VIEWPARAMS=${viewParams}` : ""
+        }&bbox=${extent.join(",")},EPSG:3857`;
+      },
+      strategy: bboxStrategy,
+    }),
+    style: styles[layer.name],
+  });
 }

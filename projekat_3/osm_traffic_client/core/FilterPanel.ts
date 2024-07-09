@@ -50,11 +50,13 @@ export class FilterPanel {
 
     const addFilter = (addAfter: FilterRow | null = null) => {
       const row = new FilterRow(this.filters.length, this.layer.attributes);
+
       row.addEventListener("addFilter", addFilter);
       row.addEventListener("removeFilter", removeFilter);
       row.addEventListener("onEnter", (e) =>
         this._changeListeners.forEach((cb) => cb(e))
       );
+
       if (addAfter !== null) {
         const index = addAfter.rowIndex + 1;
         this.filters.splice(index, 0, row);
@@ -63,8 +65,10 @@ export class FilterPanel {
         this.filters.push(row);
         this._container.append(row.container);
       }
+
       this.refreshRowIds();
     };
+
     addFilter();
   }
 
