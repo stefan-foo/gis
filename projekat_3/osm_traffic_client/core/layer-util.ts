@@ -6,7 +6,7 @@ import { bbox as bboxStrategy } from "ol/loadingstrategy";
 import { ImageWMS, TileWMS } from "ol/source";
 import VectorSource from "ol/source/Vector";
 import { GEOSERVER_URI, WORKSPACE } from "../constants";
-import { styles } from "../layer-styles";
+import { getStyle, styles } from "../layer-styles";
 import { Attribute } from "../model/attribute";
 import { DataType } from "../model/data-type";
 import { LayerInfo } from "../model/layer-info";
@@ -42,6 +42,7 @@ export async function getWFSLayersInfo(): Promise<LayerInfo[]> {
       const kws = Array.from(feature.getElementsByTagName("ows:Keyword"))
         .map((el) => el.textContent ?? "")
         .filter((e) => e !== "");
+
       const attributeElements = describeDoc.getElementsByTagName("xsd:element");
       return {
         service: "WFS",
@@ -175,6 +176,6 @@ export function createVectorLayer(
       },
       strategy: bboxStrategy,
     }),
-    style: styles[layer.name],
+    style: getStyle(layer.name),
   });
 }

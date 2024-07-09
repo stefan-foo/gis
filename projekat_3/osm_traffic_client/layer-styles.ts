@@ -35,7 +35,7 @@ export const styles: {
       }),
     });
   },
-  [`${WORKSPACE}:traffic_lights`]: function (feature, resolution) {
+  [`${WORKSPACE}:traffic_lights`]: function () {
     return new Style({
       image: new Icon({
         src: "./res/traffic-lights-10.svg",
@@ -48,5 +48,14 @@ export const styles: {
 export function getStyle(
   layer: string
 ): (f: any, r: any) => Style | Style | Style[] {
-  return styles[layer];
+  return (
+    styles[layer] ??
+    function () {
+      return new Style({
+        stroke: new Stroke({
+          width: 3,
+        }),
+      });
+    }
+  );
 }
