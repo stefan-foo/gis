@@ -151,7 +151,7 @@ async function initializeLayers() {
   const wmsLayersInfo = await getWMSLayersInfo();
 
   let group = document.createElement("H4");
-  group.textContent = "WFS";
+  group.textContent = "WFS layers";
   legend.appendChild(group);
   wfsLayersInfo.forEach((layerInfo) => {
     const paramsPanel =
@@ -165,22 +165,24 @@ async function initializeLayers() {
   });
 
   group = document.createElement("H4");
-  group.textContent = "WMS";
+  group.textContent = "WMS layers";
   legend.appendChild(group);
-  wmsLayersInfo.forEach((layerInfo) => {
-    const paramsPanel =
-      layerInfo.viewParams.length > 0 ? new ParamsPanel(layerInfo) : null;
-    let layer;
-    if (layerInfo.keywords.includes("layer:image")) {
-      layer = createImageLayer(layerInfo, paramsPanel);
-    } else {
-      layer = createTileLayer(layerInfo, paramsPanel);
-    }
-    layer.setVisible(false);
-    layer.set("name", `${layerInfo.service}-${layerInfo.name}`);
-    map.addLayer(layer);
-    addLayerControl(layer, layerInfo, paramsPanel, null);
-  });
+  wmsLayersInfo
+    .filter((l) => !l.keywords.includes("hide_wms"))
+    .forEach((layerInfo) => {
+      const paramsPanel =
+        layerInfo.viewParams.length > 0 ? new ParamsPanel(layerInfo) : null;
+      let layer;
+      if (layerInfo.keywords.includes("layer:image")) {
+        layer = createImageLayer(layerInfo, paramsPanel);
+      } else {
+        layer = createTileLayer(layerInfo, paramsPanel);
+      }
+      layer.setVisible(false);
+      layer.set("name", `${layerInfo.service}-${layerInfo.name}`);
+      map.addLayer(layer);
+      addLayerControl(layer, layerInfo, paramsPanel, null);
+    });
 }
 
 async function getFirstFeatureFromTileLayer(

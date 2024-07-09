@@ -75,11 +75,9 @@ export async function getWMSLayersInfo(): Promise<LayerInfo[]> {
 
   const text = await wmsCapabilitiesResponse.text();
   const capabilities = new WMSCapabilities().read(text);
-  console.log(capabilities);
 
   const layers: LayerInfo[] = capabilities.Capability.Layer.Layer?.map(
     (responseLayer: any) => {
-      console.log(responseLayer);
       return {
         name: responseLayer.Name,
         title: responseLayer.Title,
@@ -160,6 +158,7 @@ export function createVectorLayer(
       url: (extent) => {
         const cql = getCql(layer, filters.getFilters(), extent);
         const viewParams = params != null ? params.paramString : null;
+
         if (cql) {
           return `${GEOSERVER_URI}/${WORKSPACE}/wfs?service=WFS&request=GetFeature&typename=${
             layer.name
